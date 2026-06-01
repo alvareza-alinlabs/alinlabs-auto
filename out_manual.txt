@@ -1,0 +1,415 @@
+<#
+.SYNOPSIS
+    AUTO GIT PUSH (CYBERPUNK EDITION)
+.DESCRIPTION
+    Script push manual interaktif. Developed by AlinLabs.
+#>
+
+$ErrorActionPreference = "Continue"
+
+# Mencegah pemblokiran skrip di perangkat baru
+try {
+    if ($PSCommandPath) {
+        Unblock-File -Path $PSCommandPath -ErrorAction SilentlyContinue
+    }
+    Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+} catch {}
+
+function Write-CyberHeader ($Text) {
+    Write-Host ""
+    Write-Host " =======================================================" -ForegroundColor DarkCyan
+    Write-Host "  > $Text" -ForegroundColor Cyan
+    Write-Host " =======================================================" -ForegroundColor DarkCyan
+    Write-Host ""
+}
+
+function Write-CyberInfo ($Text) { Write-Host " [~] $Text" -ForegroundColor DarkCyan }
+function Write-CyberSuccess ($Text) { Write-Host " [+] $Text" -ForegroundColor Green }
+function Write-CyberWarn ($Text) { Write-Host " [!] $Text" -ForegroundColor Yellow }
+function Write-CyberError ($Text) { Write-Host " [x] $Text" -ForegroundColor Red }
+
+function Read-CyberInput ($Prompt) {
+    Write-Host " [>] $Prompt : " -NoNewline -ForegroundColor Cyan
+    return Read-Host
+}
+
+function Show-CyberLoading ([string]$Text) {
+    Write-Host " [~] $Text" -ForegroundColor DarkCyan
+    $barSize = 40
+    for ($i = 0; $i -le $barSize; $i++) {
+        $percent = [math]::Round(($i / $barSize) * 100)
+        $filled = "■" * $i
+        $empty = " " * ($barSize - $i)
+        Write-Host -NoNewline "`r [" -ForegroundColor DarkCyan
+        Write-Host -NoNewline "$filled$empty" -ForegroundColor Cyan
+        Write-Host -NoNewline "] $percent%" -ForegroundColor DarkCyan
+        Start-Sleep -Milliseconds 25
+    }
+    
+    Write-Host -NoNewline "`r                                                                                `r"
+    
+    try {
+        [System.Console]::SetCursorPosition(0, [System.Console]::CursorTop - 1)
+        Write-Host -NoNewline " [~] $Text " -ForegroundColor DarkCyan
+        Write-Host "✓" -ForegroundColor Green
+    } catch {
+        Write-Host " [~] $Text ✓" -ForegroundColor Green
+    }
+}
+
+try {
+    Clear-Host
+
+    # CYBER BANNER
+    $banner = @"
+
+   █████████   █████  █████ ███████████    ███████   
+  ███▒▒▒▒▒███ ▒▒███  ▒▒███ ▒█▒▒▒███▒▒▒█  ███▒▒▒▒▒███ 
+ ▒███    ▒███  ▒███   ▒███ ▒   ▒███  ▒  ███     ▒▒███
+ ▒███████████  ▒███   ▒███     ▒███    ▒███      ▒███
+ ▒███▒▒▒▒▒███  ▒███   ▒███     ▒███    ▒███      ▒███
+ ▒███    ▒███  ▒███   ▒███     ▒███    ▒▒███     ███ 
+ █████   █████ ▒▒████████      █████    ▒▒▒███████▒  
+▒▒▒▒▒   ▒▒▒▒▒   ▒▒▒▒▒▒▒▒      ▒▒▒▒▒       ▒▒▒▒▒▒▒    
+
+   --> Alinlabs Utility Technology Operations <--
+"@
+    Write-Host $banner -ForegroundColor Cyan
+
+    # Token Config 
+    $CONFIG_DIR = "$env:USERPROFILE\.git-auto-tool"
+    $CONFIG_FILE = "$CONFIG_DIR\token.json"
+
+    if (-not (Test-Path $CONFIG_DIR)) {
+        New-Item -ItemType Directory -Path $CONFIG_DIR | Out-Null
+    }
+
+    Write-CyberHeader "INISIALISASI SISTEM"
+
+    Show-CyberLoading "Memeriksa modul Git..."
+    $gitVersion = git --version 2>&1
+    if ($LASTEXITCODE -ne 0 -or -not $gitVersion) {
+        Write-CyberError "Git tidak ditemukan di sistem. Harap instal Git terlebih dahulu."
+        Read-Host " [>] Tekan [ENTER] untuk membatalkan"
+        exit
+    }
+    Write-CyberSuccess "Git terdeteksi: $gitVersion"
+
+    $PROJECT_PATH = Read-CyberInput "Path Direktori Target"
+
+    if (-not (Test-Path $PROJECT_PATH)) {
+        Write-CyberError "Path tidak ditemukan: $PROJECT_PATH"
+        Read-Host " [>] Tekan [ENTER] untuk membatalkan"
+        exit
+    }
+
+    $GITHUB_USERNAME = ""
+    $TOKEN = ""
+
+    if (Test-Path $CONFIG_FILE) {
+        $savedConfig = Get-Content $CONFIG_FILE | ConvertFrom-Json
+        Write-CyberInfo "Kredensial Tersimpan Ditemukan:"
+        Write-CyberInfo "Pengguna: $($savedConfig.username)"
+        Write-CyberInfo "Token   : ***************"
+        
+        Write-Host ""
+        $USE_OLD_TOKEN = Read-CyberInput "Gunakan kredensial aktif ini? (Y/N)"
+        if ($USE_OLD_TOKEN -match "^[Yy]$") {
+            $TOKEN = $savedConfig.token
+            $GITHUB_USERNAME = $savedConfig.username
+        } else {
+            $TOKEN = Read-CyberInput "Masukkan Token GitHub Baru"
+            $GITHUB_USERNAME = Read-CyberInput "Masukkan Username GitHub Baru"
+            $saveObject = @{ username = $GITHUB_USERNAME; token = $TOKEN }
+            $saveObject | ConvertTo-Json | Set-Content $CONFIG_FILE
+            Write-CyberSuccess "Kredensial Berhasil Diperbarui"
+        }
+    } else {
+        Write-CyberWarn "Tidak ada kredensial tersimpan"
+        $TOKEN = Read-CyberInput "Masukkan Token GitHub"
+        $GITHUB_USERNAME = Read-CyberInput "Masukkan Username GitHub"
+        $saveObject = @{ username = $GITHUB_USERNAME; token = $TOKEN }
+        $saveObject | ConvertTo-Json | Set-Content $CONFIG_FILE
+        Write-CyberSuccess "Kredensial Berhasil Disimpan"
+    }
+
+    $REPO_NAME = Read-CyberInput "Nama Repositori"
+    
+    Write-CyberHeader "MEMERIKSA KONEKSI REPOSITORI"
+    Show-CyberLoading "Mengecek status repositori di GitHub..."
+    
+    $repoExists = $false
+    while (-not $repoExists) {
+        try {
+            $checkUrl = "https://api.github.com/repos/$GITHUB_USERNAME/$REPO_NAME"
+            $null = Invoke-RestMethod -Uri $checkUrl -Method Get -Headers @{"Authorization" = "token $TOKEN"; "Accept" = "application/vnd.github.v3+json"} -ErrorAction Stop
+            $repoExists = $true
+            Write-CyberSuccess "Repositori '$REPO_NAME' ditemukan di GitHub."
+        } catch {
+            Write-CyberWarn "Repositori '$REPO_NAME' tidak ditemukan di GitHub atau akses ditolak."
+            Write-Host "   [?] Kosongkan lalu [ENTER] untuk membuat repositori baru otomatis." -ForegroundColor Cyan
+            Write-Host "   [?] Atau ketik nama repositori baru lalu [ENTER]." -ForegroundColor Cyan
+            $newRepoInput = Read-Host "   >"
+            
+            if ([string]::IsNullOrWhiteSpace($newRepoInput)) {
+                Show-CyberLoading "Membuat repositori '$REPO_NAME'..."
+                try {
+                    $body = @{ name = $REPO_NAME; private = $false } | ConvertTo-Json
+                    $null = Invoke-RestMethod -Uri "https://api.github.com/user/repos" -Method Post -Headers @{"Authorization" = "token $TOKEN"; "Accept" = "application/vnd.github.v3+json"} -Body $body -ErrorAction Stop
+                    Write-CyberSuccess "Repositori '$REPO_NAME' berhasil dibuat di GitHub."
+                    $repoExists = $true
+                } catch {
+                    Write-CyberError "Gagal membuat repositori otomatis. Error: $_"
+                    Read-Host " [>] Tekan [ENTER] untuk keluar session"
+                    exit
+                }
+            } else {
+                $REPO_NAME = $newRepoInput.Trim()
+            }
+        }
+    }
+    $REPO_URL = "https://github.com/$GITHUB_USERNAME/$REPO_NAME.git"
+
+    Write-Host ""
+    $BRANCH = Read-CyberInput "Cabang Target (Bawaan: main)"
+    if ([string]::IsNullOrWhiteSpace($BRANCH)) { $BRANCH = "main" }
+
+    Write-Host ""
+    $LFS_EXTS = Read-CyberInput "Tulis eksistensi file yang akan di masukan ke Git LFS jika ada dengan pemisah tanda koma (contoh: .mp4, .zip atau kosongkan)"
+    $LFS_SIZE = ""
+    if (-not [string]::IsNullOrWhiteSpace($LFS_EXTS)) {
+        $LFS_SIZE = Read-CyberInput "Size file spesifik jika ada (MB, masukkan angka, atau kosongkan)"
+    }
+
+    Write-Host ""
+    $CUSTOM_COMMIT = Read-CyberInput "Pesan Commit (Biarkan kosong untuk Auto Timestamp)"
+
+    Clear-Host
+    Write-Host $banner -ForegroundColor Cyan
+    Write-CyberHeader "MANIFEST DEPLOYMENT"
+    
+    Write-Host "  [-] Path Target : " -NoNewline -ForegroundColor DarkCyan; Write-Host $PROJECT_PATH -ForegroundColor White
+    Write-Host "  [-] Username    : " -NoNewline -ForegroundColor DarkCyan; Write-Host $GITHUB_USERNAME -ForegroundColor White
+    Write-Host "  [-] Repositori  : " -NoNewline -ForegroundColor DarkCyan; Write-Host $REPO_NAME -ForegroundColor White
+    Write-Host "  [-] URL Remote  : " -NoNewline -ForegroundColor DarkCyan; Write-Host $REPO_URL -ForegroundColor White
+    Write-Host "  [-] Cabang      : " -NoNewline -ForegroundColor DarkCyan; Write-Host $BRANCH -ForegroundColor White
+    if (-not [string]::IsNullOrWhiteSpace($LFS_EXTS)) {
+        Write-Host "  [-] LFS Exts    : " -NoNewline -ForegroundColor DarkCyan; Write-Host $LFS_EXTS -ForegroundColor White
+        $sizeLog = if ([string]::IsNullOrWhiteSpace($LFS_SIZE)) { "Semua Ukuran" } else { "$LFS_SIZE MB" }
+        Write-Host "  [-] LFS Size    : " -NoNewline -ForegroundColor DarkCyan; Write-Host $sizeLog -ForegroundColor White
+    }
+    Write-Host "  [-] Commit MSG  : " -NoNewline -ForegroundColor DarkCyan
+    if ([string]::IsNullOrWhiteSpace($CUSTOM_COMMIT)) {
+        Write-Host "[Auto Timestamp]" -ForegroundColor White
+    } else {
+        Write-Host $CUSTOM_COMMIT -ForegroundColor White
+    }
+    Write-Host ""
+    
+    $CONFIRM = Read-CyberInput "Eksekusi Payload? (ENTER=YA / N=BATAL)"
+    if ($CONFIRM -match "^[Nn]$") {
+        Write-CyberError "Deployment Dibatalkan oleh Pengguna"
+        Read-Host " [>] Tekan [ENTER] untuk keluar"
+        exit
+    }
+
+    Clear-Host
+    Write-CyberHeader "MENGEKSEKUSI GIT PAYLOAD"
+
+    cd $PROJECT_PATH
+
+    Show-CyberLoading "Mengecek integritas ruang kerja (Workspace)..."
+    Show-CyberLoading "Memindai file sistem dan direktori lokal..."
+    $localFiles = Get-ChildItem -Path . -Recurse -File -Force | Where-Object { $_.FullName -notmatch "\\\.git\\" }
+    $localFileCount = $localFiles.Count
+    $localTotalBytes = 0
+    foreach ($f in $localFiles) { $localTotalBytes += $f.Length }
+    $localSizeStr = if ($localTotalBytes -gt 1MB) { "{0:N2} MB" -f ($localTotalBytes / 1MB) } elseif ($localTotalBytes -gt 1KB) { "{0:N2} KB" -f ($localTotalBytes / 1KB) } else { "$localTotalBytes Bytes" }
+
+    Show-CyberLoading "Mengecek struktur Repositori..."
+    if (-not (Test-Path ".git")) {
+        Write-CyberWarn "Git belum diinisialisasi. Menyuntikkan struktur Git..."
+        git init 2>&1 | Out-Null
+        Write-CyberSuccess "Inisialisasi Git Selesai"
+    }
+
+    Show-CyberLoading "Mengaktifkan protokol LFS (Large File Storage)..."
+    git lfs install 2>&1 | Out-Null
+    
+    if (-not [string]::IsNullOrWhiteSpace($LFS_EXTS)) {
+        Show-CyberLoading "Menerapkan aturan Git LFS..."
+        $extArray = $LFS_EXTS -split ","
+        $sizeBytes = 0
+        if (-not [string]::IsNullOrWhiteSpace($LFS_SIZE)) {
+            try { $sizeBytes = [long]$LFS_SIZE * 1MB } catch { $sizeBytes = 0 }
+        }
+
+        if ($sizeBytes -gt 0) {
+            foreach ($ext in $extArray) {
+                $ext = $ext.Trim()
+                if ($ext) {
+                    if (-not $ext.StartsWith("*")) { $ext = "*$ext" }
+                    $largeFiles = Get-ChildItem -Path . -Filter "$ext" -Recurse -File | Where-Object { $_.Length -ge $sizeBytes }
+                    foreach ($file in $largeFiles) {
+                        $relPath = $file.FullName.Substring((Get-Location).Path.Length + 1).Replace('\', '/')
+                        git lfs track "$relPath" 2>&1 | Out-Null
+                    }
+                }
+            }
+        } else {
+            foreach ($ext in $extArray) {
+                $ext = $ext.Trim()
+                if ($ext) {
+                    if (-not $ext.StartsWith("*")) { $ext = "*$ext" }
+                    git lfs track "$ext" 2>&1 | Out-Null
+                }
+            }
+        }
+        git add .gitattributes 2>&1 | Out-Null
+    }
+
+    $AUTH_REPO_URL = $REPO_URL.Replace("https://", "https://$GITHUB_USERNAME`:$TOKEN@")
+    $remoteExists = git remote 2>&1 | Select-String "^origin$"
+
+    if (-not $remoteExists) {
+        Write-CyberInfo "Menyuntikkan Remote 'origin'..."
+        git remote add origin $AUTH_REPO_URL 2>&1 | Out-Null
+    } else {
+        Write-CyberInfo "Memperbarui Remote 'origin'..."
+        git remote set-url origin $AUTH_REPO_URL 2>&1 | Out-Null
+    }
+
+    Show-CyberLoading "Membangun indeks modifikasi (Staging Area)..."
+    git add . 2>&1 | Out-Null
+
+    Show-CyberLoading "Mengekstraksi metadata objek lokal..."
+
+    $stagedFiles = @()
+    $statusOutput = git status --porcelain 2>&1
+    $stagedFilesCount = 0
+    $stagedTotalBytes = 0
+
+    if ($statusOutput) {
+        foreach ($line in ($statusOutput -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+            $lineStr = [string]$line
+            if ($lineStr.Length -gt 3) {
+                $statusCode = $lineStr.Substring(0, 2)
+                $f = $lineStr.Substring(3).Trim()
+                if ($f -match "->\s*(.*)$") {
+                    $f = $matches[1]
+                }
+                $f = $f -replace '^"|"$', ''
+                if (-not [string]::IsNullOrWhiteSpace($f)) {
+                    $actualPath = Join-Path -Path (Get-Location).Path -ChildPath $f
+                    $fSize = 0
+                    $fSizeStr = "0 B"
+                    if (Test-Path -LiteralPath $actualPath -ErrorAction SilentlyContinue) {
+                        $fSize = (Get-Item -LiteralPath $actualPath -ErrorAction SilentlyContinue).Length
+                        $fSizeStr = if ($fSize -gt 1MB) { "{0:N2} MB" -f ($fSize / 1MB) } elseif ($fSize -gt 1KB) { "{0:N2} KB" -f ($fSize / 1KB) } else { "$fSize B" }
+                        $stagedTotalBytes += $fSize
+                    } elseif ($statusCode -match "D") {
+                         $fSizeStr = "Terhapus"
+                    }
+                    $stagedFilesCount++
+                    $item = [PSCustomObject]@{
+                        Path = $f
+                        SizeStr = $fSizeStr
+                        Status = $statusCode
+                    }
+                    $stagedFiles += $item
+                }
+            }
+        }
+    }
+
+    Write-Host ""
+    Write-Host "   === INFORMASI WORKSPACE LOKAL ===" -ForegroundColor Cyan
+    Write-Host "   [-] Sumber Lokal : " -NoNewline -ForegroundColor DarkCyan; Write-Host $PROJECT_PATH -ForegroundColor White
+    Write-Host "   [-] Target Repo  : " -NoNewline -ForegroundColor DarkCyan; Write-Host $REPO_URL -ForegroundColor White
+    Write-Host "   [-] Cabang       : " -NoNewline -ForegroundColor DarkCyan; Write-Host $BRANCH -ForegroundColor White
+    Write-Host "   [-] Total File   : " -NoNewline -ForegroundColor DarkCyan; Write-Host "$localFileCount file(s)" -ForegroundColor White
+    Write-Host "   [-] Total Ukuran : " -NoNewline -ForegroundColor DarkCyan; Write-Host $localSizeStr -ForegroundColor White
+    Write-Host ""
+
+    Write-Host "   === INFORMASI PERUBAHAN (PAYLOAD) ===" -ForegroundColor Cyan
+    if ($stagedFilesCount -gt 0) {
+        Write-Host "   [~] Rincian File yang Akan Di-push:" -ForegroundColor DarkCyan
+        foreach ($file in $stagedFiles) {
+            Write-Host "       |-- $($file.Path) [$($file.SizeStr)]" -ForegroundColor DarkGray
+            Start-Sleep -Milliseconds 15
+        }
+        $stagedSizeStr = if ($stagedTotalBytes -gt 1MB) { "{0:N2} MB" -f ($stagedTotalBytes / 1MB) } elseif ($stagedTotalBytes -gt 1KB) { "{0:N2} KB" -f ($stagedTotalBytes / 1KB) } else { "$stagedTotalBytes Bytes" }
+        Write-Host "   [-] File Berubah : " -NoNewline -ForegroundColor DarkCyan; Write-Host "$stagedFilesCount file(s)" -ForegroundColor White
+        Write-Host "   [-] Ukuran Push  : " -NoNewline -ForegroundColor DarkCyan; Write-Host $stagedSizeStr -ForegroundColor White
+    } else {
+        Write-Host "   [!] Tidak ada file yang berubah atau perlu di-push (Clear)." -ForegroundColor Yellow
+    }
+    Write-Host ""
+
+    Show-CyberLoading "Mengenkripsi metadata commit..."
+
+    if ($stagedFilesCount -gt 0) {
+        if ([string]::IsNullOrWhiteSpace($CUSTOM_COMMIT)) {
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $commitMessage = "[UPDATE-SISTEM] Auto-Push $timestamp"
+        } else {
+            $commitMessage = $CUSTOM_COMMIT
+        }
+        Show-CyberLoading "Melakukan commit data..."
+        git commit -m $commitMessage 2>&1 | Out-Null
+        Write-CyberSuccess "Commit berhasil diterapkan: $commitMessage"
+    } else {
+        Write-CyberWarn "Tidak ada perubahan sistem yang terdeteksi untuk di-commit (Clear)"
+    }
+
+    Show-CyberLoading "Mengkalibrasi uplink ke Node Utama (GitHub)..."
+
+    $currentBranch = git branch --show-current 2>&1
+    if ([string]::IsNullOrWhiteSpace($currentBranch) -or $currentBranch -match "fatal") {
+        git branch -M $BRANCH 2>&1 | Out-Null
+    } elseif ($currentBranch.Trim() -ne $BRANCH) {
+        Write-CyberInfo "Berpindah ke Cabang: $BRANCH..."
+        $hasHead = git rev-parse HEAD 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            git checkout -B $BRANCH 2>&1 | Out-Null
+        } else {
+            git branch -M $BRANCH 2>&1 | Out-Null
+        }
+    }
+    
+    Show-CyberLoading "Membangun terowongan aman (Secure Tunnel)..."
+    Show-CyberLoading "Mengompresi data untuk transmisi..."
+    Show-CyberLoading "Mentransmisikan file ke repositori (Push)..."
+    $pushOutput = git push -u origin $BRANCH --force 2>&1 | Out-String
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-CyberHeader "KEGAGALAN SISTEM !"
+        if ($pushOutput -match "Authentication failed" -or $pushOutput -match "403") {
+            Write-CyberError "Gagal mengautentikasi: Token GitHub atau Username tidak valid/kadaluarsa."
+            Write-CyberError "Pastikan Personal Access Token memiliki izin 'repo'."
+        } elseif ($pushOutput -match "not found" -or $pushOutput -match "404") {
+            Write-CyberError "Repositori tidak ditemukan. Pastikan nama repositori dan username sudah benar."
+        } elseif ($pushOutput -match "src refspec" -and $pushOutput -match "does not match any") {
+            Write-CyberError "Cabang '$BRANCH' kosong dan tidak ada file untuk di-push."
+        } else {
+            Write-CyberError "Transmisi ditolak. Rincian Error:"
+            Write-Host $pushOutput -ForegroundColor Red
+        }
+    } else {
+        Write-CyberHeader "DEPLOYMENT BERHASIL"
+        Write-CyberSuccess "Semua sistem berjalan normal."
+        Write-Host ""
+        $repoCleanUrl = $REPO_URL -replace "\.git$",""
+        Write-Host " [🔗] Tautan Repositori: $repoCleanUrl" -ForegroundColor Cyan
+    }
+}
+catch {
+    Write-Host ""
+    Write-CyberError "KESALAHAN FATAL TERDETEKSI PADA SISTEM:"
+    Write-Host " " $_.Exception.Message -ForegroundColor Red
+}
+
+Write-Host ""
+Read-Host " [>] Tekan [ENTER] untuk menutup terminal"
+
+

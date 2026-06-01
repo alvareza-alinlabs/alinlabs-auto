@@ -1,0 +1,22 @@
+{
+  "name": "Alinlabs Utility Technology Operations",
+  "short_name": "AUTO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030509",
+  "theme_color": "#030509",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
